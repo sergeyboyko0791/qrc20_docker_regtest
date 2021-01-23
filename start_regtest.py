@@ -1,6 +1,7 @@
 import os
 import time
 import sys
+import threading
 import subprocess
 from subprocess import PIPE
 
@@ -39,26 +40,32 @@ class Node:
             conf.write("server=1\n")
             conf.write("rpcuser=" + self.rpc_user + '\n')
             conf.write("rpcpassword=" + self.rpc_password + '\n')
-            conf.write("rpcport=" + str(self.rpc_port) + '\n')
             conf.write("rpcallowip=0.0.0.0/0\n")
             conf.write("logevents=1\n")
             conf.write("addressindex=1\n")
             conf.write("txindex=1\n")
-            # Duplicate rpcport with regtest attribute
             conf.write("[regtest]\n")
             conf.write("rpcport=" + str(self.rpc_port) + '\n')
             conf.write("[regtest]\n")
             conf.write("rpcbind=0.0.0.0\n")
 
-# TODO replace external values here
-root = sys.path[0]
-clients_to_start = int(os.environ['CLIENTS'])
+# Fill the blockchain mempool by periodically sending transactions
+def fill_mempool_loop(node):
+    print("Start fill_mempool_loop")
+    while True:
+        assert node.cli_cmd('sendtoaddress', ['qeUbAVgkPiF62syqd792VJeB9BaqMtLcZV', "0.01"])
+        time.sleep(0.1)
+
+ROOT = sys.path[0]
+CLIENTS_TO_START = int(os.environ['CLIENTS'])
 COIN_RPC_PORT = int(os.environ['COIN_RPC_PORT'])
+ADDRESS_LABEL = os.environ['ADDRESS_LABEL']
+FILL_MEMPOOL = os.getenv('FILL_MEMPOOL', 'false').lower() == 'true'
 
 nodes = []
-for i in range(clients_to_start):
-    node_root = root + '/node_' + str(i) + '/'
-    bin_path = root + '/bin/'
+for i in range(CLIENTS_TO_START):
+    node_root = ROOT + '/node_' + str(i) + '/'
+    bin_path = ROOT + '/bin/'
     port = 6000 + i
     rpc_port = COIN_RPC_PORT + i
 
@@ -77,10 +84,8 @@ for i, node in enumerate(nodes):
         assert node.run(first_node_address).returncode == 0
     time.sleep(5)
 
-# Generate an address with the specified CONTRACT_LABEL that can be used to create token and send its tokens
-contract_label = os.environ['ADDRESS_LABEL']
-assert contract_label
-result = nodes[0].cli_cmd('getnewaddress', [contract_label])
+# Generate an address with the specified ADDRESS_LABEL that can be used to create token and send its tokens
+result = nodes[0].cli_cmd('getnewaddress', [ADDRESS_LABEL])
 assert result.returncode == 0
 address = result.stdout.splitlines()[0]
 print('Generate to address ' + address)
@@ -89,7 +94,11 @@ print('Generate to address ' + address)
 # so we should generate more than 500 blocks for the given address
 nodes[0].cli_cmd('generatetoaddress', [str(600), address])
 
-time.sleep(2)
+time.sleep(0.5)
+
+# Spawn the 'fill_mempool_loop' if it is required
+if FILL_MEMPOOL:
+    threading.Thread(target=fill_mempool_loop, args=(nodes[0],), daemon=True).start()
 
 # starting blocks creation on last node
 result = nodes[-1].cli_cmd('getnewaddress')
