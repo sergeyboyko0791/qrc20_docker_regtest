@@ -1,4 +1,4 @@
-FROM qtum/qtum
+FROM sergeyboyko/qtum
 
 RUN apt-get update && apt-get install -y sudo python python3.7 python3-pip ca-certificates curl wget apt-utils
 

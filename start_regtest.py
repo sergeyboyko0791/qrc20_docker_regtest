@@ -15,7 +15,20 @@ class Node:
         self.rpc_password = 'test'
         self.rpc_port = rpc_port
 
-    def cli_cmd(self, command, args = None):
+    def cli_cmd(self, command, args = [], attempts = 4, interval_s = 1):
+        assert attempts > 0
+        result = None
+        for attempt in range(attempts):
+            result = self.__cli_cmd_impl(command, args[:])
+            if result.returncode == 0:
+                return result
+            else:
+                attempts_left = attempts - attempt - 1
+                print("Client command error [command: {}] [args: {}] [attempts left: {}].\nstdout: {}\nstderr: {}".format(command, args, attempts_left, result.stdout, result.stderr))
+                time.sleep(interval_s)
+        return result
+
+    def __cli_cmd_impl(self, command, args = None):
         if args is None:
             args = []
         args.insert(0, self.bin_path + '/qtum-cli')
@@ -91,8 +104,9 @@ address = result.stdout.splitlines()[0]
 print('Generate to address ' + address)
 
 # node[0] will be used by integration tests to send Qtum amounts and deploy a smart contract
-# so we should generate more than 500 blocks for the given address
-nodes[0].cli_cmd('generatetoaddress', [str(600), address])
+# so we should generate more than 2000 blocks for the given address.
+# For some reason, the first 1999 blocks don't give rewards.
+nodes[0].cli_cmd('generatetoaddress', [str(2100), address])
 
 time.sleep(0.5)
 
@@ -108,4 +122,3 @@ print('Starting blocks generation to address ' + address)
 while True:
     assert nodes[-1].cli_cmd('generatetoaddress', [str(1), address]).returncode == 0
     time.sleep(2)
-
