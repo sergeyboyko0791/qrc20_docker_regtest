@@ -1,9 +1,10 @@
+import json
 import os
-import time
 import sys
-import threading
 import subprocess
 from subprocess import PIPE
+import time
+import threading
 
 class Node:
     def __init__(self, node_root, bin_path, port, rpc_port):
@@ -44,6 +45,8 @@ class Node:
                    '-whitelist=127.0.0.1', '-regtest', '-daemon']
         if connect_to is not None:
             args.append('-addnode=' + connect_to)
+
+        print("Run QTUM node [args={}]".format(args))
         return subprocess.run(args, stdout=PIPE, stderr=PIPE, universal_newlines=True)
 
     def prepare_config(self):
@@ -69,11 +72,22 @@ def fill_mempool_loop(node):
         assert node.cli_cmd('sendtoaddress', ['qeUbAVgkPiF62syqd792VJeB9BaqMtLcZV', "0.01"])
         time.sleep(0.1)
 
+def check_mempool_loop(node, interval_s):
+    print("Start check_mempool_loop")
+    while True:
+        result = node.cli_cmd('getmempoolinfo')
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        print(">>>> Mempool <<<<")
+        print(data)
+        time.sleep(interval_s)
+
 ROOT = sys.path[0]
 CLIENTS_TO_START = int(os.environ['CLIENTS'])
 COIN_RPC_PORT = int(os.environ['COIN_RPC_PORT'])
 ADDRESS_LABEL = os.environ['ADDRESS_LABEL']
 FILL_MEMPOOL = os.getenv('FILL_MEMPOOL', 'false').lower() == 'true'
+CHECK_MEMPOOL = os.getenv('CHECK_MEMPOOL', 'false').lower() == 'true'
 
 nodes = []
 for i in range(CLIENTS_TO_START):
@@ -86,8 +100,6 @@ for i in range(CLIENTS_TO_START):
     node.prepare_config()
     nodes.append(node)
 
-print('config is ready')
-
 first_node_address = None
 for i, node in enumerate(nodes):
     if i == 0:
@@ -95,24 +107,30 @@ for i, node in enumerate(nodes):
         assert node.run().returncode == 0
     else:
         assert node.run(first_node_address).returncode == 0
-    time.sleep(5)
+
+time.sleep(2)
 
 # Generate an address with the specified ADDRESS_LABEL that can be used to create token and send its tokens
-result = nodes[0].cli_cmd('getnewaddress', [ADDRESS_LABEL])
+print("\nNOTE: There will be several attempts to get a new address as the wallet may not have loaded yet\n")
+result = nodes[0].cli_cmd('getnewaddress', [ADDRESS_LABEL], 20, 0.5)
 assert result.returncode == 0
 address = result.stdout.splitlines()[0]
-print('Generate to address ' + address)
 
-# node[0] will be used by integration tests to send Qtum amounts and deploy a smart contract
+print('Generate to address ' + address)
+# node[0] will be used by integration tests to send Qtum amounts and deploy smart contracts
 # so we should generate more than 2000 blocks for the given address.
 # For some reason, the first 1999 blocks don't give rewards.
 nodes[0].cli_cmd('generatetoaddress', [str(2100), address])
 
+print('config is ready')
 time.sleep(0.5)
 
 # Spawn the 'fill_mempool_loop' if it is required
 if FILL_MEMPOOL:
     threading.Thread(target=fill_mempool_loop, args=(nodes[0],), daemon=True).start()
+
+if CHECK_MEMPOOL:
+    threading.Thread(target=check_mempool_loop, args=(nodes[0], 5,), daemon=True).start()
 
 # starting blocks creation on last node
 result = nodes[-1].cli_cmd('getnewaddress')
