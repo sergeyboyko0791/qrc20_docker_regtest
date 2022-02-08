@@ -118,9 +118,9 @@ address = result.stdout.splitlines()[0]
 
 print('Generate to address ' + address)
 # node[0] will be used by integration tests to send Qtum amounts and deploy smart contracts
-# so we should generate more than 2000 blocks for the given address.
-# For some reason, the first 1999 blocks don't give rewards.
-nodes[0].cli_cmd('generatetoaddress', [str(2100), address])
+# so we should generate more than 500 blocks for the given address.
+# For some reason, the first 499 blocks don't give rewards.
+nodes[0].cli_cmd('generatetoaddress', [str(600), address])
 
 print('config is ready')
 time.sleep(0.5)
