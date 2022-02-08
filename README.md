@@ -1,6 +1,22 @@
+# Building
+
 To build test blockchain docker image (--no-cache flag is optional when you making some changes in deps mostly):
 
-`docker build -f Dockerfile.blockchain --no-cache -t qtumregtest .`
+`docker build -f Dockerfile -t qtumregtest .`
+
+# Publishing
+
+To publish new release use:
+
+1. Create a new builder, which gives us access to some new multi-arch features (skip this step if you've created a custom builder already).
+
+`docker buildx create --name mybuilder`
+`docker buildx use mybuilder`
+`docker buildx inspect --bootstrap`
+
+2. `docker buildx build --platform linux/arm64,linux/amd64 -f Dockerfile -t PUBLISHER/qtumregtest .`
+
+# Running
 
 Run as (exposes single node on port 7000 to connect to):
 
